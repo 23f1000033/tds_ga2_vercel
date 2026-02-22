@@ -55,7 +55,6 @@ def mean(values):
 def percentile(values, p):
     sorted_vals = sorted(values)
     n = len(sorted_vals)
-    # Using linear interpolation (same as numpy default)
     index = (p / 100) * (n - 1)
     lower = int(index)
     upper = lower + 1
@@ -68,7 +67,7 @@ def percentile(values, p):
 class handler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
-        pass  # Suppress default request logs
+        pass
 
     def send_cors_headers(self):
         for key, value in CORS_HEADERS.items():
@@ -84,7 +83,7 @@ class handler(BaseHTTPRequestHandler):
         self.send_cors_headers()
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(json.dumps({"status": "ok", "message": "POST to this endpoint with {regions, threshold_ms}"}).encode())
+        self.wfile.write(json.dumps({"status": "ok"}).encode())
 
     def do_POST(self):
         content_length = int(self.headers.get("Content-Length", 0))
@@ -103,17 +102,17 @@ class handler(BaseHTTPRequestHandler):
         regions = payload.get("regions", [])
         threshold_ms = payload.get("threshold_ms", 180)
 
-        result = {}
+        regions_result = {}
         for region in regions:
             records = [r for r in DATA if r["region"] == region]
             if not records:
-                result[region] = {"error": "No data found"}
+                regions_result[region] = {"error": "No data found"}
                 continue
 
             latencies = [r["latency_ms"] for r in records]
             uptimes = [r["uptime_pct"] for r in records]
 
-            result[region] = {
+            regions_result[region] = {
                 "avg_latency": round(mean(latencies), 4),
                 "p95_latency": round(percentile(latencies, 95), 4),
                 "avg_uptime": round(mean(uptimes), 4),
@@ -124,4 +123,4 @@ class handler(BaseHTTPRequestHandler):
         self.send_cors_headers()
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(json.dumps(result).encode())
+        self.wfile.write(json.dumps({"regions": regions_result}).encode())
