@@ -1,5 +1,4 @@
 import json
-import numpy as np
 from http.server import BaseHTTPRequestHandler
 
 CORS_HEADERS = {
@@ -49,7 +48,27 @@ DATA = [
 ]
 
 
+def mean(values):
+    return sum(values) / len(values)
+
+
+def percentile(values, p):
+    sorted_vals = sorted(values)
+    n = len(sorted_vals)
+    # Using linear interpolation (same as numpy default)
+    index = (p / 100) * (n - 1)
+    lower = int(index)
+    upper = lower + 1
+    if upper >= n:
+        return sorted_vals[-1]
+    fraction = index - lower
+    return sorted_vals[lower] + fraction * (sorted_vals[upper] - sorted_vals[lower])
+
+
 class handler(BaseHTTPRequestHandler):
+
+    def log_message(self, format, *args):
+        pass  # Suppress default request logs
 
     def send_cors_headers(self):
         for key, value in CORS_HEADERS.items():
@@ -60,9 +79,17 @@ class handler(BaseHTTPRequestHandler):
         self.send_cors_headers()
         self.end_headers()
 
+    def do_GET(self):
+        self.send_response(200)
+        self.send_cors_headers()
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"status": "ok", "message": "POST to this endpoint with {regions, threshold_ms}"}).encode())
+
     def do_POST(self):
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length)
+
         try:
             payload = json.loads(body)
         except Exception:
@@ -82,13 +109,15 @@ class handler(BaseHTTPRequestHandler):
             if not records:
                 result[region] = {"error": "No data found"}
                 continue
+
             latencies = [r["latency_ms"] for r in records]
             uptimes = [r["uptime_pct"] for r in records]
+
             result[region] = {
-                "avg_latency": round(float(np.mean(latencies)), 4),
-                "p95_latency": round(float(np.percentile(latencies, 95)), 4),
-                "avg_uptime": round(float(np.mean(uptimes)), 4),
-                "breaches": int(sum(1 for l in latencies if l > threshold_ms)),
+                "avg_latency": round(mean(latencies), 4),
+                "p95_latency": round(percentile(latencies, 95), 4),
+                "avg_uptime": round(mean(uptimes), 4),
+                "breaches": sum(1 for l in latencies if l > threshold_ms),
             }
 
         self.send_response(200)
